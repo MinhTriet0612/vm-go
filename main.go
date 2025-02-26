@@ -23,7 +23,7 @@ func main() {
 
 	domainXML := &libvirtxml.Domain{
 		Type: "kvm",
-		Name: "vm-user-1",
+		Name: "debian12",
 		Memory: &libvirtxml.DomainMemory{
 			Value: 1024 * 1024, // 1GB RAM
 		},
@@ -31,15 +31,30 @@ func main() {
 			Value: 2, // 2 vCPUs
 		},
 		OS: &libvirtxml.DomainOS{
-			Type: &libvirtxml.DomainOSType{Arch: "x86_64", Machine: "pc-i440fx-2.11", Type: "hvm"},
+			Type: &libvirtxml.DomainOSType{
+				Arch:    "x86_64",
+				Machine: "pc-i440fx-2.11",
+				Type:    "hvm"},
+
+			BootDevices: []libvirtxml.DomainBootDevice{
+				{Dev: "cdrom"},
+				{Dev: "hd"},
+			},
 		},
 		Devices: &libvirtxml.DomainDeviceList{
 			Disks: []libvirtxml.DomainDisk{
 				{
 					Device: "disk",
+					Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2"},
+					Source: &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: "/var/lib/libvirt/images/debian12.qcow2"}},
+					Target: &libvirtxml.DomainDiskTarget{Dev: "vdb", Bus: "virtio"},
+				},
+
+				{
+					Device: "cdrom",
 					Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
-					Source: &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: "/var/lib/libvirt/images/ubuntu-18.04-server-cloudimg-amd64.img"}},
-					Target: &libvirtxml.DomainDiskTarget{Dev: "vda", Bus: "virtio"},
+					Source: &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: "/var/lib/libvirt/images/debian-12.9.0-amd64-netinst.iso "}},
+					Target: &libvirtxml.DomainDiskTarget{Dev: "hda", Bus: "ide"},
 				},
 			},
 			Interfaces: []libvirtxml.DomainInterface{
@@ -51,20 +66,11 @@ func main() {
 				},
 			},
 		},
+		Clock: &libvirtxml.DomainClock{
+			Offset: "utc",
+		},
 	}
 
-	// how to find domain by id
-	// domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE | libvirt.CONNECT_LIST_DOMAINS_INACTIVE)
-	// if err != nil {
-	// 	log.Fatalf("Failed to list domains: %v", err)
-	// }
-	// for _, domain := range domains {
-	// 	name, err := domain.GetID()
-	// 	if err != nil {
-	// 		log.Fatalf("Failed to get domain id: %v", err)
-	// 	}
-	// 	fmt.Println(name)
-	//
 	xmlData, err := domainXML.Marshal()
 	if err != nil {
 		log.Fatalf("Failed to generate XML: %v", err)
@@ -76,17 +82,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to define domain: %v", err)
 	}
-	defer domain.Free()
 
-	// Start VM
+	defer domain.Free()
 
 	if err := domain.Create(); err != nil {
 		log.Fatalf("Failed to start VM: %v", err)
 	}
-
-	// Get the VM's IP address (requires `virsh net-dhcp-leases default`)
-	// time.Sleep(10 * time.Second) // Wait for DHCP to assign IP
-	// leases, err := conn.NetworkLookupByName("default")
 
 	// get ip address
 	// network, err := conn.NetworkLookupByName("default")
@@ -97,4 +98,5 @@ func main() {
 	// // Print VM info
 	// fmt.Println("VM Created Successfully! Use SSH to access it:")
 	// fmt.Println("ssh user@<vm-ip-address>")
+
 }
