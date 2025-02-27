@@ -24,50 +24,120 @@ func main() {
 	domainXML := &libvirtxml.Domain{
 		Type: "kvm",
 		Name: "debian12",
+		UUID: "b3cca077-4e9f-4a9d-af69-bb17437ed6cd", // Using the provided UUID
 		Memory: &libvirtxml.DomainMemory{
-			Value: 1024 * 1024, // 1GB RAM
+			Value: 2048,
+			Unit:  "MiB",
+		},
+		CurrentMemory: &libvirtxml.DomainCurrentMemory{
+			Value: 2048,
+			Unit:  "MiB",
 		},
 		VCPU: &libvirtxml.DomainVCPU{
-			Value: 2, // 2 vCPUs
+			Placement: "static",
+			Value:     2, // 2 CPUs
 		},
 		OS: &libvirtxml.DomainOS{
 			Type: &libvirtxml.DomainOSType{
 				Arch:    "x86_64",
-				Machine: "pc-i440fx-2.11",
-				Type:    "hvm"},
-
+				Machine: "pc-q35-6.2",
+				Type:    "hvm",
+			},
 			BootDevices: []libvirtxml.DomainBootDevice{
-				{Dev: "cdrom"},
-				{Dev: "hd"},
+				{Dev: "cdrom"}, // Boot from ISO first
+				{Dev: "hd"},    // Then hard disk
 			},
 		},
+		Features: &libvirtxml.DomainFeatureList{
+			ACPI: &libvirtxml.DomainFeature{},
+			// APIC:   &libvirtxml.DomainFeature{},
+			// VMPort: &libvirtxml.DomainFeatureVM{State: "off"},
+		},
+		CPU: &libvirtxml.DomainCPU{
+			Mode:       "host-passthrough",
+			Check:      "none",
+			Migratable: "on",
+		},
+		Clock: &libvirtxml.DomainClock{
+			Offset: "utc",
+			// Timers: []*libvirtxml.DomainTimer{
+			// 	{Name: "rtc", TickPolicy: "catchup"},
+			// 	{Name: "pit", TickPolicy: "delay"},
+			// 	{Name: "hpet", Present: "no"},
+			// },
+		},
+		OnPoweroff: "destroy",
+		OnReboot:   "destroy",
+		OnCrash:    "destroy",
 		Devices: &libvirtxml.DomainDeviceList{
 			Disks: []libvirtxml.DomainDisk{
 				{
 					Device: "disk",
-					Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2"},
-					Source: &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: "/var/lib/libvirt/images/debian12.qcow2"}},
-					Target: &libvirtxml.DomainDiskTarget{Dev: "vdb", Bus: "virtio"},
+					Driver: &libvirtxml.DomainDiskDriver{
+						Name:    "qemu",
+						Type:    "qcow2",
+						Discard: "unmap",
+					},
+					Source: &libvirtxml.DomainDiskSource{
+						File: &libvirtxml.DomainDiskSourceFile{
+							File: "/var/lib/libvirt/images/debian-12-genericcloud-amd64.qcow2",
+						},
+						Index: 1,
+					},
+					Target: &libvirtxml.DomainDiskTarget{
+						Dev: "vda",
+						Bus: "virtio",
+					},
 				},
-
-				{
-					Device: "cdrom",
-					Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
-					Source: &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: "/var/lib/libvirt/images/debian-12.9.0-amd64-netinst.iso "}},
-					Target: &libvirtxml.DomainDiskTarget{Dev: "hda", Bus: "ide"},
-				},
+				// {
+				// 	Device: "cdrom",
+				// 	Driver: &libvirtxml.DomainDiskDriver{
+				// 		Name: "qemu",
+				// 		Type: "raw",
+				// 	},
+				// 	Source: &libvirtxml.DomainDiskSource{
+				// 		File: &libvirtxml.DomainDiskSourceFile{
+				// 			File: "/var/lib/libvirt/images/debian-12.9.0-amd64-netinst.iso",
+				// 		},
+				// 		Index: 1,
+				// 	},
+				// 	Target: &libvirtxml.DomainDiskTarget{
+				// 		Dev: "sda",
+				// 		Bus: "sata",
+				// 	},
+				// 	ReadOnly: &libvirtxml.DomainDiskReadOnly{},
+				// },
 			},
 			Interfaces: []libvirtxml.DomainInterface{
 				{
-					Model: &libvirtxml.DomainInterfaceModel{Type: "virtio"},
+					MAC: &libvirtxml.DomainInterfaceMAC{
+						Address: "52:54:00:b7:a5:c2",
+					},
+
 					Source: &libvirtxml.DomainInterfaceSource{
-						Network: &libvirtxml.DomainInterfaceSourceNetwork{Network: "default", Bridge: "br0"},
+						Network: &libvirtxml.DomainInterfaceSourceNetwork{
+							Network: "default",
+							Bridge:  "virbr0",
+						},
+					},
+					Model: &libvirtxml.DomainInterfaceModel{
+						Type: "virtio",
 					},
 				},
 			},
-		},
-		Clock: &libvirtxml.DomainClock{
-			Offset: "utc",
+			Graphics: []libvirtxml.DomainGraphic{
+				{
+					VNC: &libvirtxml.DomainGraphicVNC{
+						Port:   -1,
+						Listen: "0.0.0.0",
+					},
+
+					Spice: &libvirtxml.DomainGraphicSpice{
+						Port:   -1,
+						Listen: "0.0.0.0",
+					},
+				},
+			},
 		},
 	}
 
@@ -85,18 +155,11 @@ func main() {
 
 	defer domain.Free()
 
-	if err := domain.Create(); err != nil {
-		log.Fatalf("Failed to start VM: %v", err)
-	}
-
-	// get ip address
-	// network, err := conn.NetworkLookupByName("default")
-	// if err != nil {
-	// 	log.Fatalf("Failed to get network: %v", err)
+	// if err := domain.Create(); err != nil {
+	// 	log.Fatalf("Failed to start VM: %v", err)
 	// }
-	//
-	// // Print VM info
-	// fmt.Println("VM Created Successfully! Use SSH to access it:")
-	// fmt.Println("ssh user@<vm-ip-address>")
+
+	// how to get network of the VM
+	// domain.GetInterfaceParameters("vnet1", 0)
 
 }
