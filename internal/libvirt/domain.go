@@ -1,19 +1,41 @@
-package main
+package libvirt
 
 import (
 	"fmt"
 	"log"
+	// "time"
 
+	"github.com/google/uuid"
 	"github.com/libvirt/libvirt-go"
 	"github.com/libvirt/libvirt-go-xml"
 )
 
-func uintPtr(value uint) *uint {
-	return &value
+type MemoryUnit string
+
+const (
+	MiB MemoryUnit = "MiB"
+	GiB MemoryUnit = "GiB"
+)
+
+type OSType string
+
+const (
+	OSTypeUbuntu OSType = "ubuntu"
+	OSTypeDebian OSType = "debian"
+)
+
+type Memory struct {
+	Value uint
+	Unit  MemoryUnit
 }
 
-func main() {
+type Spec struct {
+	CPU    uint
+	Memory *Memory
+	OS     OSType
+}
 
+func CreateDomain(spec *Spec) (*libvirt.Domain, error) {
 	conn, err := libvirt.NewConnect("qemu:///system")
 
 	if err != nil {
@@ -26,19 +48,19 @@ func main() {
 
 	domainXML := &libvirtxml.Domain{
 		Type: "kvm",
-		Name: "unbuntu20",
-		UUID: "b3cca077-4e9f-4a9d-af69-bb17437ed6cd", // Using the provided UUID
+		Name: "debian12",
+		UUID: uuid.New().String(),
 		Memory: &libvirtxml.DomainMemory{
-			Value: 2048,
-			Unit:  "MiB",
+			Value: spec.Memory.Value,
+			Unit:  string(spec.Memory.Unit),
 		},
 		CurrentMemory: &libvirtxml.DomainCurrentMemory{
-			Value: 2048,
-			Unit:  "MiB",
+			Value: spec.Memory.Value,
+			Unit:  string(spec.Memory.Unit),
 		},
 		VCPU: &libvirtxml.DomainVCPU{
 			Placement: "static",
-			Value:     2, // 2 CPUs
+			Value:     spec.CPU,
 		},
 		OS: &libvirtxml.DomainOS{
 			Type: &libvirtxml.DomainOSType{
@@ -53,6 +75,8 @@ func main() {
 		},
 		Features: &libvirtxml.DomainFeatureList{
 			ACPI: &libvirtxml.DomainFeature{},
+			// APIC:   &libvirtxml.DomainFeature{},
+			// VMPort: &libvirtxml.DomainFeatureVM{State: "off"},
 		},
 		CPU: &libvirtxml.DomainCPU{
 			Mode:       "host-passthrough",
@@ -61,39 +85,27 @@ func main() {
 		},
 		Clock: &libvirtxml.DomainClock{
 			Offset: "utc",
+			// Timers: []*libvirtxml.DomainTimer{
+			// 	{Name: "rtc", TickPolicy: "catchup"},
+			// 	{Name: "pit", TickPolicy: "delay"},
+			// 	{Name: "hpet", Present: "no"},
+			// },
 		},
 		OnPoweroff: "destroy",
 		OnReboot:   "destroy",
 		OnCrash:    "destroy",
 		Devices: &libvirtxml.DomainDeviceList{
 			Disks: []libvirtxml.DomainDisk{
-				// {
-				// 	Device: "disk",
-				// 	Driver: &libvirtxml.DomainDiskDriver{
-				// 		Name:    "qemu",
-				// 		Type:    "qcow2",
-				// 		Discard: "unmap",
-				// 	},
-				// 	Source: &libvirtxml.DomainDiskSource{
-				// 		File: &libvirtxml.DomainDiskSourceFile{
-				// 			File: "/var/lib/libvirt/images/debian-12-genericcloud-amd64.qcow2",
-				// 		},
-				// 		Index: 1,
-				// 	},
-				// 	Target: &libvirtxml.DomainDiskTarget{
-				// 		Dev: "vda",
-				// 		Bus: "virtio",
-				// 	},
-				// },
 				{
 					Device: "disk",
 					Driver: &libvirtxml.DomainDiskDriver{
-						Name: "qemu",
-						Type: "qcow2",
+						Name:    "qemu",
+						Type:    "qcow2",
+						Discard: "unmap",
 					},
 					Source: &libvirtxml.DomainDiskSource{
 						File: &libvirtxml.DomainDiskSourceFile{
-							File: "/var/lib/libvirt/images/alexng.img",
+							File: "/var/lib/libvirt/images/debian-12-genericcloud-amd64.qcow2",
 						},
 						Index: 1,
 					},
@@ -101,19 +113,6 @@ func main() {
 						Dev: "vda",
 						Bus: "virtio",
 					},
-					Alias: &libvirtxml.DomainAlias{
-						Name: "virtio-disk0",
-					},
-					Address: &libvirtxml.DomainAddress{
-						PCI: &libvirtxml.DomainAddressPCI{
-							Domain:   uintPtr(0),
-							Bus:      uintPtr(4),
-							Slot:     uintPtr(0),
-							Function: uintPtr(0),
-						},
-					},
-
-					ReadOnly: &libvirtxml.DomainDiskReadOnly{},
 				},
 				// {
 				// 	Device: "cdrom",
@@ -123,9 +122,9 @@ func main() {
 				// 	},
 				// 	Source: &libvirtxml.DomainDiskSource{
 				// 		File: &libvirtxml.DomainDiskSourceFile{
-				// 			File: "/var/lib/libvirt/images/cloud-init.iso",
+				// 			File: "/var/lib/libvirt/images/debian-12.9.0-amd64-netinst.iso",
 				// 		},
-				// 		Index: 2,
+				// 		Index: 1,
 				// 	},
 				// 	Target: &libvirtxml.DomainDiskTarget{
 				// 		Dev: "sda",
@@ -181,9 +180,5 @@ func main() {
 
 	defer domain.Free()
 
-	if err := domain.Create(); err != nil {
-		log.Fatalf("Failed to start VM: %v", err)
-	}
-
-	domain.GetInterfaceParameters("vnet1", 0)
+	return domain, nil
 }
